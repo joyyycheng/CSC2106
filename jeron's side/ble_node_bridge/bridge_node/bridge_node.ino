@@ -63,6 +63,11 @@ class ServerCallbacks : public BLEServerCallbacks {
     void onDisconnect(BLEServer *pServer) {
         deviceConnected = false;
         Serial.println("BLE Client Disconnected");
+        BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+        pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
+        pAdvertising->setScanResponse(true);
+        pServer->getAdvertising()->start();
+        Serial.println("BLE Server Started, Waiting for connection...");
     }
 };
 
@@ -114,7 +119,8 @@ void setupBLE() {
 
 void notifyClient() {
     if (deviceConnected) {
-        dataCharacteristic.setValue("TEST DATA");
+        String dataToSend = "TEST DATA";
+        dataCharacteristic.setValue(dataToSend.c_str());
         dataCharacteristic.notify();
         Serial.println("Sending................");
     }

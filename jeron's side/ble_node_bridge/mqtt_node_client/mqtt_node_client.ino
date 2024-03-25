@@ -15,8 +15,6 @@
 
 #define LED_PIN 10
 
-// CRASH WHEN RECIEVED DATA FROM BLE SERVER
-
 // Prototypes
 void setupWifi();
 void reConnectMqtt();
@@ -37,9 +35,9 @@ bool doConnect = false;
 bool connected = false;
 bool newData = false;
 
-// BLE notify
-const uint8_t notificationOn[] = {0x01, 0x00};
-const uint8_t notificationOff[] = {0x00, 0x00};
+// // BLE notify VARIABLE RELATED TO CRASH
+// const uint8_t notificationOn[] = {0x01, 0x00};
+// const uint8_t notificationOff[] = {0x00, 0x00};
 
 // variable to store the BLE data
 char bleData[20];
@@ -77,8 +75,8 @@ void loop() {
   if (doConnect == true) {
     if (connectToServer(*pServerAddress)){
         Serial.println("Connected to the BLE Server");
-        // Start the BLE notify
-        dataCharacteristic->getDescriptor(BLEUUID((uint16_t)0x2902))->writeValue((uint8_t*)notificationOn, 2, true);
+        // CRASH HERE WHEN UNCOMMENTED
+        // dataCharacteristic->getDescriptor(BLEUUID((uint16_t)0x2902))->writeValue((uint8_t*)notificationOn, 2, true);
         connected = true;
     } else {
         Serial.println("Failed to connect to the BLE Server");
@@ -86,7 +84,8 @@ void loop() {
     doConnect = false;
   }
   if (newData) {
-    Serial.println("New data received");
+    Serial.println("New data received\n");
+    Serial.println(bleData);
     newData = false;
     // Publish the data to the MQTT broker
     client.publish("presenceModule/data", bleData);
@@ -195,15 +194,11 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
 }
 
 static void dataNotifyCallback(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
-    Serial.print("Data received: ");
-    for (int i = 0; i < length; i++) {
-        Serial.print((char)pData[i]);
-        bleData[i] = (char)pData[i];
-    }
-    Serial.println();
+    std::string readingsValue(reinterpret_cast<char*>(pData), length);
+    strncpy(bleData, readingsValue.c_str(), sizeof(bleData) - 1);
+    bleData[sizeof(bleData)-1] = '\0';
     newData = true;
 }
-
 
 void toggleLED(){
     ledStatus = !ledStatus;
