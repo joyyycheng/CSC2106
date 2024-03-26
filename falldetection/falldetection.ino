@@ -1,8 +1,8 @@
+#include <painlessMesh.h>
 #include <M5StickCPlus.h> // Include M5StickC Plus library
 #include <60ghzfalldetection.h>
 #include <SoftwareSerial.h>
 #include <Wire.h>
-#include <painlessMesh.h>
 
 #define rxPin 32
 #define txPin 33
@@ -112,38 +112,37 @@ void setup() {
 
 void loop()
 {
+  mesh.update();
+  digitalWrite(LED, !onFlag);
   // put your main code here, to run repeatedly:
-  if (millis() - tsLastReport > REPORTING_PERIOD_MS) {
-    radar.Fall_Detection();           //Receive radar data and start processing
-    if(radar.sensor_report != 0x00){
-      switch(radar.sensor_report){
+  radar.Fall_Detection();           //Receive radar data and start processing
+  if(radar.sensor_report != 0x00){
+    Serial.println("IF LOOP");
+    switch(radar.sensor_report){
+      Serial.println("SWITCH CASE");
         case NOFALL:
-          Serial.println("The sensor detects this movement is not a fall.");
-          Serial.println("----------------------------");
-          messageString = "The sensor detects this movement is not a fall.";
-          break;
+            Serial.println("The sensor detects this movement is not a fall.");
+            Serial.println("----------------------------");
+            messageString = "The sensor detects this movement is not a fall.";
+            break;
         case FALL:
-          Serial.println("The sensor detects a fall.");
-          Serial.println("----------------------------");
-          messageString = "The sensor detects a fall.";
-          break;
+            Serial.println("The sensor detects a fall.");
+            Serial.println("----------------------------");
+            messageString = "The sensor detects a fall.";
+            break;
         case NORESIDENT:
-          Serial.println("The sensors did not detect anyone staying in place.");
-          Serial.println("----------------------------");
-          messageString = "The sensors did not detect anyone staying in place.";
-          break;
+            Serial.println("The sensors did not detect anyone staying in place.");
+            Serial.println("----------------------------");
+            messageString = "The sensors did not detect anyone staying in place.";
+            break;
         case RESIDENCY:
-          Serial.println("The sensor detects someone staying in place.");
-          Serial.println("----------------------------");
-          messageString = "The sensor detects someone staying in place.";
-          break;
-      }
+            Serial.println("The sensor detects someone staying in place.");
+            Serial.println("----------------------------");
+            messageString = "The sensor detects someone staying in place.";
+            break;
     }
-
-    tsLastReport = millis();
   }
-  
-  mesh.update();                    //Add time delay to avoid program jam
+  delay(200); //Add time delay to avoid program jam                
 }
 
 int randomizePriority() {
@@ -207,7 +206,7 @@ void printMessages() {
     // Loop through all the properties in the message object
     Serial.printf("Received message from node %u: ", id);
     for (JsonPair property : message) {
-      Serial.printf("%s = %f, ", property.key().c_str(), property.value().as<float>());
+      Serial.printf("%s = %s, ", property.key().c_str(), property.value().as<String>().c_str());
     }
     Serial.println();
 
@@ -226,7 +225,7 @@ void sendMessage() {
   StaticJsonDocument<200> jsonDocument;
   String jsonString;
   JsonObject message = jsonDocument.createNestedObject("message");
-  message["message"] = messageString;
+  message["fall_detection"] = messageString;
 
   jsonDocument["id"] = mesh.getNodeId();
   jsonDocument["priority"] = randomizePriority();

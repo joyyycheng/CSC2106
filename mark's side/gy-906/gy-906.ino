@@ -162,7 +162,8 @@ void printMessages() {
     // Loop through all the properties in the message object
     Serial.printf("Received message from node %u: ", id);
     for (JsonPair property : message) {
-      Serial.printf("%s = %f, ", property.key().c_str(), property.value().as<float>());
+      Serial.printf("%s = %s, ", property.key().c_str(), property.value().as<String>().c_str());
+
     }
     Serial.println();
 
