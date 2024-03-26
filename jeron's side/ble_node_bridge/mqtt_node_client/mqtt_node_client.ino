@@ -4,8 +4,8 @@
 #include <BLEDevice.h>
 #include <ArduinoJson.h>
 
-#define WIFI_SSID         "NG_FAMILY_2.4"
-#define WIFI_PASSWORD     "S81618778"
+#define WIFI_SSID         "Jeron"
+#define WIFI_PASSWORD     "88888888"
 
 #define MQTT_BROKER "pi.local"
 #define MQTT_PORT 1883
@@ -39,8 +39,11 @@ bool newData = false;
 // const uint8_t notificationOn[] = {0x01, 0x00};
 // const uint8_t notificationOff[] = {0x00, 0x00};
 
-// variable to store the BLE data
-char bleData[20];
+
+#define MAX_JSON_SIZE 512 // Adjust the maximum JSON size as needed
+char bleData[MAX_JSON_SIZE]; // Buffer to store accumulated JSON data
+size_t bleDataIndex = 0; // Index to track the position in the buffer
+
 
 class AdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
     void onResult(BLEAdvertisedDevice advertisedDevice) {
@@ -193,12 +196,40 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
   Serial.println();
 }
 
+
 static void dataNotifyCallback(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
-    std::string readingsValue(reinterpret_cast<char*>(pData), length);
-    strncpy(bleData, readingsValue.c_str(), sizeof(bleData) - 1);
-    bleData[sizeof(bleData)-1] = '\0';
-    newData = true;
+    // Accumulate received data in the buffer
+    if (bleDataIndex + length >= MAX_JSON_SIZE) {
+        Serial.println("Buffer overflow!");
+        bleDataIndex = 0; // Reset buffer index
+        return; // Handle overflow
+    }
+
+    memcpy(bleData + bleDataIndex, pData, length);
+    bleDataIndex += length;
+
+    // Check if the end of the JSON object has been received
+    if (bleDataIndex > 0 && bleData[bleDataIndex - 1] == '}') {
+        // Attempt to parse JSON from the accumulated data
+        StaticJsonDocument<MAX_JSON_SIZE> doc;
+        DeserializationError error = deserializeJson(doc, bleData, bleDataIndex);
+
+        // Check for parsing errors
+        if (error) {
+            Serial.print("JSON parsing failed: ");
+            Serial.println(error.c_str());
+        } else {
+            // Parsing successful, print the parsed JSON
+            Serial.println("Parsed JSON:");
+            serializeJsonPretty(doc, Serial);
+            Serial.println();
+        }
+
+        // Reset buffer for next data
+        bleDataIndex = 0;
+    }
 }
+
 
 void toggleLED(){
     ledStatus = !ledStatus;
