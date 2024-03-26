@@ -60,6 +60,7 @@ void setup() {
 
   M5.Lcd.setTextSize(2);
   M5.Lcd.println("MLX90614 Test");
+  M5.Lcd.setRotation(3);
 
   mesh.setDebugMsgTypes(ERROR | DEBUG);  // set before init() so that you can see error messages
 
@@ -103,7 +104,13 @@ void loop() {
   amb_temp = mlx.readAmbientTempC();
   mesh.update();
   digitalWrite(LED, !onFlag);
-  delay(1000);
+
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.setCursor(0, 0, 2);
+  M5.Lcd.printf("Obj Temp: %5.2f C", obj_temp);
+  M5.Lcd.setCursor(0, 40, 2);
+  M5.Lcd.printf("Amb Temp: %5.2f C", amb_temp);
+  delay(500);
 }
 
 // Lab 6 add-ons
