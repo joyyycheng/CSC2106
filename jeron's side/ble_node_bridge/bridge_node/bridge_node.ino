@@ -3,6 +3,7 @@
 #include <M5StickCPlus.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
+#include <BLEUtils.h>
 #include <ArduinoJson.h>
 
 // some gpio pin that is connected to an LED...
@@ -56,6 +57,10 @@ unsigned long timerInterval = 5000;
 
 class ServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer *pServer) {
+        uint16_t bleID = pServer->getConnId();
+        pServer->updatePeerMTU(bleID, 90);
+        Serial.print("MTU updated to: ");
+        Serial.println(pServer->getPeerMTU(bleID));
         deviceConnected = true;
         Serial.println("BLE Client Connected");
     }
@@ -86,7 +91,7 @@ void setup() {
 void loop() {
     mesh.update();
     if (deviceConnected && (millis() - lastMillis > timerInterval)){
-        notifyClient();
+        //notifyClient();
         lastMillis = millis();
     }
     digitalWrite(LED, !onFlag);
@@ -98,6 +103,10 @@ void setupBLE() {
     BLEDevice::init(BLE_SERVER_NAME);
     BLEServer *pServer = BLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
+    uint16_t mtu = 95;
+    BLEDevice::setMTU(mtu);
+    Serial.print("MTU set to:");
+    Serial.println(BLEDevice::getMTU());
     BLEService *bleService = pServer->createService(BLE_SERVICE_UUID);
 
     // Add the data characteristic to the service
@@ -117,14 +126,14 @@ void setupBLE() {
 }
 
 
-void notifyClient() {
-    if (deviceConnected) {
-        String dataToSend = "TEST DATA";
-        dataCharacteristic.setValue(dataToSend.c_str());
-        dataCharacteristic.notify();
-        Serial.println("Sending................");
-    }
-}
+// void notifyClient() {
+//     if (deviceConnected) {
+//         String dataToSend = "TEST DATA";
+//         dataCharacteristic.setValue(dataToSend.c_str());
+//         dataCharacteristic.notify();
+//         Serial.println("Sending................");
+//     }
+// }
 
 void setupTaskA(){
   userScheduler.addTask( taskSendMessage );
@@ -212,7 +221,60 @@ void receivedCallback(uint32_t from, String & msg) {
       Serial.println(error.c_str());
       return;
   }
-  
+
+  if (deviceConnected) {
+        String jsonString;
+        serializeJson(jsonDocument["message"], jsonString);
+
+        // Calculate the number of chunks
+        int numChunks = jsonString.length() / 20 + (jsonString.length() % 20 != 0 ? 1 : 0);
+
+        for (int i = 0; i < numChunks; ++i) {
+            // Get the substring for the current chunk
+            String chunk = jsonString.substring(i * 20, min((i + 1) * 20, jsonString.length()));
+
+            // Set the value of the characteristic with the chunk
+            dataCharacteristic.setValue(chunk.c_str());
+            dataCharacteristic.notify();
+
+            Serial.print("Sending chunk ");
+            Serial.print(i + 1);
+            Serial.print(" of ");
+            Serial.println(numChunks);
+
+            // Add a delay of 1000 milliseconds (1 second) between chunks
+            delay(1000);
+        }
+    }
+
+
+  // if (deviceConnected) {
+  //   String jsonString;
+  //   serializeJson(jsonDocument, jsonString);
+  //   JsonObject message = jsonDocument["message"];
+  //   for (JsonPair property : message) {
+  //     char buffer[50]; // Adjust the buffer size as needed
+
+  //     // Format the string
+  //     sprintf(buffer, "%s = %f, ", property.key().c_str(), property.value().as<float>());
+
+  //     Serial.println(buffer);
+
+  //     // Set the value of the characteristic with the formatted string
+  //     dataCharacteristic.setValue(buffer);
+  //     // Serial.printf("%s = %f, ", property.key().c_str(), property.value().as<float>());
+  //     // String topic = "sensor/" + String(property.key().c_str());
+  //     // String payload = String(property.value().as<float>()).c_str();
+  //     // client.publish(topic.c_str(), payload.c_str());
+      
+  //     dataCharacteristic.notify();
+      
+  //     Serial.println("Sending................");
+  //     delay(1000);
+    
+  //   }
+  //}
+
   uint32_t priority = jsonDocument["priority"].as<uint32_t>();
 
   SimpleList<String>::iterator it = messageList.begin();
@@ -253,8 +315,8 @@ void printMessages() {
     Serial.printf("Received message from node %u: ", id);
     for (JsonPair property : message) {
       Serial.printf("%s = %f, ", property.key().c_str(), property.value().as<float>());
-      String topic = "sensor/" + String(property.key().c_str());
-      String payload = String(property.value().as<float>()).c_str();
+      // String topic = "sensor/" + String(property.key().c_str());
+      // String payload = String(property.value().as<float>()).c_str();
       // client.publish(topic.c_str(), payload.c_str());
     }
     Serial.println();
@@ -287,6 +349,7 @@ void changedConnectionCallback() {
   blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD*1000))/1000);
  
   nodes = mesh.getNodeList();
+
 
   Serial.printf("Num nodes: %d\n", nodes.size());
   Serial.printf("Connection list:");
