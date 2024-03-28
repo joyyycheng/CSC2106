@@ -33,7 +33,7 @@ SimpleList<uint32_t> nodes;
 SimpleList<String> messageList;
 
 // Prototypes
-int randomizePriority();
+// int randomizePriority();
 void receivedCallback(uint32_t from, String& msg);
 void printMessages();  // Prototype
 void sendMessage();
@@ -114,9 +114,9 @@ void loop() {
 }
 
 // Lab 6 add-ons
-int randomizePriority() {
-  return random(1, 4);
-}
+// int randomizePriority() {
+//   return random(1, 4);
+// }
 
 void receivedCallback(uint32_t from, String& msg) {
   StaticJsonDocument<200> jsonDocument;
@@ -126,7 +126,7 @@ void receivedCallback(uint32_t from, String& msg) {
     Serial.println(error.c_str());
     return;
   }
-  uint32_t priority = jsonDocument["priority"].as<uint32_t>();
+  // uint32_t priority = jsonDocument["priority"].as<uint32_t>();
   SimpleList<String>::iterator it = messageList.begin();
   while (it != messageList.end()) {
     StaticJsonDocument<200> existingMsg;
@@ -136,10 +136,10 @@ void receivedCallback(uint32_t from, String& msg) {
       Serial.println(existingError.c_str());
       continue;  // Skip this message
     }
-    uint32_t existingPriority = existingMsg["priority"].as<uint32_t>();
-    if (priority < existingPriority) {
-      break;  // Found the position to insert the message
-    }
+    // uint32_t existingPriority = existingMsg["priority"].as<uint32_t>();
+    // if (priority < existingPriority) {
+    //   break;  // Found the position to insert the message
+    // }
     ++it;
   }
   messageList.insert(it, msg);
@@ -167,7 +167,7 @@ void printMessages() {
     }
     Serial.println();
 
-    uint32_t priority = jsonDocument["priority"];
+    // uint32_t priority = jsonDocument["priority"];
 
     // Format and print the message
     // Serial.printf("Received message from node %u: heart rate = %f, SpO2 = %f, priority = %u\n", id, heartRate, spO2, priority);
@@ -185,7 +185,7 @@ void sendMessage() {
   message["amb_temp"] = amb_temp;
   message["obj_temp"] = obj_temp;
   jsonDocument["id"] = mesh.getNodeId();
-  jsonDocument["priority"] = randomizePriority();
+  // jsonDocument["priority"] = randomizePriority();
 
   // Convert the JSON document to a string
   serializeJson(jsonDocument, jsonString);
