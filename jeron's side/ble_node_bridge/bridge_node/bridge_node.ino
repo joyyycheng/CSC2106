@@ -57,10 +57,10 @@ unsigned long timerInterval = 5000;
 
 class ServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer *pServer) {
-        uint16_t bleID = pServer->getConnId();
-        pServer->updatePeerMTU(bleID, 90);
-        Serial.print("MTU updated to: ");
-        Serial.println(pServer->getPeerMTU(bleID));
+        // uint16_t bleID = pServer->getConnId();
+        // pServer->updatePeerMTU(bleID, 90);
+        // Serial.print("MTU updated to: ");
+        // Serial.println(pServer->getPeerMTU(bleID));
         deviceConnected = true;
         Serial.println("BLE Client Connected");
     }
@@ -103,10 +103,10 @@ void setupBLE() {
     BLEDevice::init(BLE_SERVER_NAME);
     BLEServer *pServer = BLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
-    uint16_t mtu = 95;
-    BLEDevice::setMTU(mtu);
-    Serial.print("MTU set to:");
-    Serial.println(BLEDevice::getMTU());
+    // uint16_t mtu = 95;
+    // BLEDevice::setMTU(mtu);
+    // Serial.print("MTU set to:");
+    // Serial.println(BLEDevice::getMTU());
     BLEService *bleService = pServer->createService(BLE_SERVICE_UUID);
 
     // Add the data characteristic to the service
@@ -166,7 +166,7 @@ void setupTaskA(){
 }
 
 void setupMesh(){
-  // mesh.setDebugMsgTypes(ERROR | DEBUG | CONNECTION | STARTUP );  // set before init() so that you can see error messages
+  mesh.setDebugMsgTypes(ERROR | DEBUG | CONNECTION | STARTUP );  // set before init() so that you can see error messages
   mesh.init(MESH_SSID, MESH_PASSWORD, &userScheduler, MESH_PORT);
   mesh.onReceive(&receivedCallback);
   mesh.onNewConnection(&newConnectionCallback);
@@ -350,7 +350,7 @@ void changedConnectionCallback() {
  
   nodes = mesh.getNodeList();
 
-
+  
   Serial.printf("Num nodes: %d\n", nodes.size());
   Serial.printf("Connection list:");
 

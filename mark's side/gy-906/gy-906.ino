@@ -31,6 +31,8 @@ Scheduler userScheduler;  // to control your personal task
 painlessMesh mesh;
 SimpleList<uint32_t> nodes;
 SimpleList<String> messageList;
+uint32_t rootNodeID;
+StaticJsonDocument<200> doc;
 
 // Prototypes
 // int randomizePriority();
@@ -190,7 +192,8 @@ void sendMessage() {
   // Convert the JSON document to a string
   serializeJson(jsonDocument, jsonString);
 
-  mesh.sendBroadcast(jsonString);
+  mesh.sendSingle(rootNodeID, jsonString);
+  // mesh.sendBroadcast(jsonString);
 
   if (calc_delay) {
     SimpleList<uint32_t>::iterator node = nodes.begin();
@@ -204,6 +207,9 @@ void sendMessage() {
   taskSendMessage.setInterval(TASK_SECOND);  // send every 1 second
 }
 
+
+uint32_t rootNodeID;
+StaticJsonDocument<200> doc;
 void newConnectionCallback(uint32_t nodeId) {
   // Reset blink task
   onFlag = false;
@@ -211,6 +217,24 @@ void newConnectionCallback(uint32_t nodeId) {
   blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD * 1000)) / 1000);
   Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
   Serial.printf("--> startHere: New Connection, %s\n", mesh.subConnectionJson(true).c_str());
+
+  doc.clear();
+  DeserializationError error = deserializeJson(doc, mesh.subConnectionJson(true).c_str());
+  if (error) {
+    Serial.println("Failed to parse JSON");
+    return;
+  }
+  
+  JsonArray subs = doc["subs"];
+  for (JsonObject sub : subs) {
+    // Check if 'root' is true
+    if (sub["root"] == true) {
+      // Get the 'nodeId' and set it to the global variable 'rootNodeID'
+      rootNodeID = sub["nodeId"];
+      Serial.printf("Root node ID: %u\n", rootNodeID);
+      break;
+    }
+  }
 }
 
 void changedConnectionCallback() {
