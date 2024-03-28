@@ -229,11 +229,17 @@ void sendMessage() {
 
   jsonDocument["id"] = mesh.getNodeId();
   jsonDocument["priority"] = randomizePriority();
+
+  uint32_t destinationId = 0; // Default to 0 if node list is empty
+  if (!mesh.getNodeList().empty()) {
+      destinationId = mesh.getNodeList().front();
+  }
+
   // Convert the JSON document to a string
   serializeJson(jsonDocument, jsonString);
 
   // Send the JSON string
-  mesh.sendBroadcast(jsonString);
+  mesh.sendSingle(destinationId, jsonString);
 
   // Print the message being sent
   Serial.printf("Sending message: %s\n", jsonString.c_str());
