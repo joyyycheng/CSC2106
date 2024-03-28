@@ -110,7 +110,7 @@ void loop() {
   M5.Lcd.printf("Obj Temp: %5.2f C", obj_temp);
   M5.Lcd.setCursor(0, 40, 2);
   M5.Lcd.printf("Amb Temp: %5.2f C", amb_temp);
-  delay(500);
+  delay(1000);
 }
 
 // Lab 6 add-ons
