@@ -33,7 +33,6 @@ bool ledStatus = false;
 // BLE connection
 bool doConnect = false;
 bool connected = false;
-bool newData = false;
 
 // // BLE notify VARIABLE RELATED TO CRASH
 // const uint8_t notificationOn[] = {0x01, 0x00};
@@ -65,7 +64,7 @@ void setup() {
 
   setupWifi();
   setupBLE();
-
+  
   // Start the MQTT thread
   xTaskCreate(mqttTask, "mqttTask", 4096, NULL, 1, NULL);
 }
@@ -85,13 +84,6 @@ void loop() {
         Serial.println("Failed to connect to the BLE Server");
     }
     doConnect = false;
-  }
-  if (newData) {
-    Serial.println("New data received\n");
-    Serial.println(bleData);
-    newData = false;
-    // Publish the data to the MQTT broker
-    client.publish("presenceModule/data", bleData);
   }
   delay(1000);
 }
@@ -177,7 +169,7 @@ void reConnectMqtt() {
         client.publish("heartsensor/spo2", "start");
     } else {
         M5.Lcd.printf("\nFailed\n");
-        Serial.print("Failed to connect to MQTT broker, rc=");
+        Serial.print("Failed to connect to MQTT broker");
         Serial.print(client.state());
         Serial.println(" Try again in 5 seconds");
         delay(5000);
@@ -223,10 +215,25 @@ static void dataNotifyCallback(BLERemoteCharacteristic* pBLERemoteCharacteristic
             Serial.println("Parsed JSON:");
             serializeJsonPretty(doc, Serial);
             Serial.println();
+            // Publish the parsed JSON to MQTT
+            publishMqtt(doc);
         }
 
         // Reset buffer for next data
         bleDataIndex = 0;
+    }
+}
+
+void publishMqtt(JsonDocument& doc) {
+    // Serialize the JSON document to a string
+    String jsonString;
+    serializeJson(doc, jsonString);
+
+    // Publish the JSON string to MQTT
+    if (client.connected()) {
+        client.publish("topic", jsonString.c_str());
+    } else {
+        Serial.println("MQTT client not connected.");
     }
 }
 
