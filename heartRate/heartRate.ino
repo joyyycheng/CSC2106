@@ -48,6 +48,8 @@ bool calc_delay = false;
 SimpleList<uint32_t> nodes;
 SimpleList<String> messageList;
 SimpleList<String> receiveMessage;
+uint32_t rootNodeID;
+StaticJsonDocument<200> doc;
  
 float heartrate = 1.0;
 float spo2 = 2.0;
@@ -128,7 +130,7 @@ void setup() {
   });
   userScheduler.addTask(blinkNoNodes);
   blinkNoNodes.enable();
-
+  
 
   // jsonDocument = StaticJsonDocument<200>();
   // array = jsonDocument.to<JsonArray>();
@@ -173,14 +175,6 @@ void receivedCallback(uint32_t from, String & msg) {
           Serial.println(existingError.c_str());
           continue; // Skip this message
       }
-      
-
-
-      existingMsg["id"] = mesh.getNodeId();
-      String modifiedMsg;
-      serializeJson(existingMsg, modifiedMsg);
-      mesh.sendBroadcast(modifiedMsg);
-      Serial.printf("Sending modified message: %s\n", modifiedMsg.c_str());
 
       ++it;
   }
@@ -207,7 +201,7 @@ void printMessages() {
     // Loop through all the properties in the message object
     Serial.printf("Received message from node %u: ", id);
     for (JsonPair property : message) {
-      Serial.printf("%s = %f, ", property.key().c_str(), property.value().as<float>());
+      Serial.printf("%s = %s, ", property.key().c_str(), property.value().as<String>().c_str());
     }
     Serial.println();
 
@@ -231,7 +225,7 @@ void sendMessage() {
   serializeJson(jsonDocument, jsonString);
 
   // Send the JSON string
-  //mesh.sendSingle(jsonString);
+  mesh.sendSingle(rootNodeID, jsonString);
 
   // Print the message being sent
   Serial.printf("Sending message: %s\n", jsonString.c_str());
@@ -241,26 +235,48 @@ void sendMessage() {
 }
 
 
+void findRootNode(JsonObject node) {
+  // Check if 'root' is true
+  if (node["root"] == true) {
+    // Get the 'nodeId' and set it to the global variable 'rootNodeID'
+    rootNodeID = node["nodeId"];
+    Serial.printf("Root node ID: %u\n", rootNodeID);
+    return;
+  }
+
+  // If 'root' is not true, check the sub-nodes
+  JsonArray subs = node["subs"];
+  for (JsonObject sub : subs) {
+    findRootNode(sub);
+  }
+}
 
 void newConnectionCallback(uint32_t nodeId) {
   // Reset blink task
   onFlag = false;
   blinkNoNodes.setIterations((mesh.getNodeList().size() + 1) * 2);
-  blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD*1000))/1000);
- 
+  blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD * 1000)) / 1000);
   Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
   Serial.printf("--> startHere: New Connection, %s\n", mesh.subConnectionJson(true).c_str());
+
+  doc.clear();
+  DeserializationError error = deserializeJson(doc, mesh.subConnectionJson(true).c_str());
+  if (error) {
+    Serial.println("Failed to parse JSON");
+    return;
+  }
+
+  findRootNode(doc.as<JsonObject>());
 }
+
 
 void changedConnectionCallback() {
   Serial.printf("Changed connections\n");
   // Reset blink task
   onFlag = false;
   blinkNoNodes.setIterations((mesh.getNodeList().size() + 1) * 2);
-  blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD*1000))/1000);
- 
+  blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD * 1000)) / 1000);
   nodes = mesh.getNodeList();
-
   Serial.printf("Num nodes: %d\n", nodes.size());
   Serial.printf("Connection list:");
 
