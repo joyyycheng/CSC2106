@@ -11,7 +11,7 @@ Able to integrate multiple sensors for the system(Presence, Heart Rate, Temperat
 There are a few devices to be set up, please navigate to the respective header for your device
 
 ### Raspberry Pi
-This Raspberry Pi will be set up with Home Assistant & Docker (Full guide on [this website](https://www.tim-kleyersburg.de/articles/home-assistant-waith-docker-2023/))
+This Raspberry Pi will be set up with Home Assistant & Docker (Full guide on [this website](https://www.tim-kleyersburg.de/articles/home-assistant-with-docker-2023/)).
 
 1. Install Rasberry Pi OS with Raspberry Pi Imager
 2. Install Docker
