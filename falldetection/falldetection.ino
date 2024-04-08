@@ -2,10 +2,10 @@
 #include <M5StickCPlus.h>  // Include M5StickC Plus library
 #include <60ghzfalldetection.h>
 #include <SoftwareSerial.h>
-#include <Wire.h>
+// #include <Wire.h>
 
-#define rxPin 32
-#define txPin 33
+#define RX_Pin 32
+#define TX_Pin 33
 
 #ifdef LED_BUILTIN
 #define LED LED_BUILTIN
@@ -21,7 +21,7 @@
 #define MESH_PASSWORD "heartsensor"
 #define MESH_PORT 5555
 
-SoftwareSerial mySerial(rxPin, txPin);
+SoftwareSerial mySerial(RX_Pin, TX_Pin);
 FallDetection_60GHz radar = FallDetection_60GHz(&mySerial);
 // Prototypes
 void sendMessage();
@@ -36,14 +36,23 @@ Scheduler userScheduler;  // to control your personal task
 painlessMesh mesh;
 
 uint32_t tsLastReport = 0;
+uint32_t sensor_report = 0;
 
 bool calc_delay = false;
 SimpleList<uint32_t> nodes;
 SimpleList<String> messageList;
-SimpleList<String> receiveMessage;
 
-String messageString = "";
+// Root node id
 uint32_t rootNodeID;
+
+StaticJsonDocument<200> doc;
+
+// Retention value for human detection
+unsigned long lastDetectionTime = 0;
+const unsigned long retentionPeriod = 20000;
+
+String fall_msg = "";
+String exist_msg = "";
 
 void sendMessage();                                                       // Prototype
 Task taskSendMessage(TASK_SECOND * 1, TASK_FOREVER, &sendMessage);        // start with a one second interval
@@ -55,36 +64,35 @@ Task blinkNoNodes;
 bool onFlag = false;
 
 void setup() {
+  delay(5000);
+  Serial.begin(115200);
+  mySerial.begin(115200);
   M5.begin();
-  pinMode(rxPin, INPUT);
-  pinMode(txPin, OUTPUT);
+
+  pinMode(RX_Pin, INPUT);
+  pinMode(TX_Pin, OUTPUT);  
   pinMode(LED, OUTPUT);
 
-  Serial.begin(115200);
-  // Serial2.begin(unsigned long baud, uint32_t config, int8_t rxPin, int8_t txPin, bool invert)
-  // Serial2.begin(115200, SERIAL_8N1, RX, TX);
-  mySerial.begin(115200);
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.println("Fall Detection initiate");
+  M5.Lcd.setRotation(3);
 
-  while (!Serial)
-    ;
-  Serial.println("123Ready");
+  while (!Serial);
+  if (mySerial.isListening()) { 
+    Serial.println("mySerial is listening!");
+  }
 
   mesh.setDebugMsgTypes(ERROR | DEBUG);  // set before init() so that you can see error messages
-
   mesh.init(MESH_SSID, MESH_PASSWORD, &userScheduler, MESH_PORT);
-
   mesh.onReceive(&receivedCallback);
   mesh.onNewConnection(&newConnectionCallback);
   mesh.onChangedConnections(&changedConnectionCallback);
   mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
   mesh.onNodeDelayReceived(&delayReceivedCallback);
-
   userScheduler.addTask(taskSendMessage);
   taskSendMessage.enable();
   userScheduler.addTask(taskReceivedMessage);
   taskReceivedMessage.enable();
-
-
   blinkNoNodes.set(BLINK_PERIOD, (mesh.getNodeList().size() + 1) * 2, []() {
     // If on, switch off, else switch on
     if (onFlag)
@@ -111,45 +119,87 @@ void setup() {
   randomSeed(analogRead(G10));
 }
 
-void loop() {
-  mesh.update();
-  digitalWrite(LED, !onFlag);
-  // put your main code here, to run repeatedly:
-  radar.Fall_Detection();  //Receive radar data and start processing
-  if (radar.sensor_report != 0x00) {
-    Serial.println("IF LOOP");
-    switch (radar.sensor_report) {
-      Serial.println("SWITCH CASE");
-      case NOFALL:
-        Serial.println("The sensor detects this movement is not a fall.");
+void human_existent() {
+  radar.HumanExis_Func();
+
+  if(radar.sensor_report != 0x00){
+
+    lastDetectionTime = millis();
+    switch(radar.sensor_report){
+      case NOONE:
+        Serial.println("Nobody here.");
         Serial.println("----------------------------");
-        messageString = "The sensor detects this movement is not a fall.";
+        exist_msg = "Nobody here.";
         break;
-      case FALL:
-        Serial.println("The sensor detects a fall.");
+      case SOMEONE:
+        Serial.println("Someone is here.");
         Serial.println("----------------------------");
-        messageString = "The sensor detects a fall.";
+        exist_msg = "Someone is here.";
         break;
-      case NORESIDENT:
-        Serial.println("The sensors did not detect anyone staying in place.");
+      case NONEPSE:
+        Serial.println("No human activity messages.");
         Serial.println("----------------------------");
-        messageString = "The sensors did not detect anyone staying in place.";
+        exist_msg = "No human activity messages.";
         break;
-      case RESIDENCY:
-        Serial.println("The sensor detects someone staying in place.");
+      case STATION:
+        Serial.println("Someone stop");
         Serial.println("----------------------------");
-        messageString = "The sensor detects someone staying in place.";
+        exist_msg = "Someone stop";
+        break;
+      case MOVE:
+        Serial.println("Someone moving");
+        Serial.println("----------------------------");
+        exist_msg = "Someone moving";
+        break;
+      case BODYVAL:
+        Serial.print("The parameters of human body signs are: ");
+        Serial.println(radar.bodysign_val, DEC);
+        exist_msg = "The parameters of human body signs are: ";
+        // Serial.println(radar.bodysign_val, DEC);
         break;
     }
+  } else {
+    // If no detection has occurred and the retention period has passed, clear the message
+    if (millis() - lastDetectionTime >= retentionPeriod) {
+      exist_msg = ""; // Clear the message
+    }
   }
-  delay(200);  //Add time delay to avoid program jam
 }
 
-int randomizePriority() {
-  return random(1, 4);
+void loop() {
+  static unsigned long lastMeshUpdateTime = 0; // Variable to store the last time mesh.update() was called
+  static unsigned long lastFallDetectionTime = 0; // Variable to store the last time fall_detection() was called
+
+  if (!mySerial.isListening()) { 
+    Serial.println("mySerial is not listening!");
+  }
+
+  // Check if it's time to run fall_detection()
+  if (millis() - lastFallDetectionTime >= 1000) {
+    // radar.Fall_Detection();           //Receive radar data and start processing
+    // sensor_report = radar.sensor_report;
+    // fall_detection();
+
+    // radar.reset_func();
+
+    // radar.HumanExis_Func();
+    // sensor_report = radar.sensor_report;
+    human_existent();
+    lastFallDetectionTime = millis(); // Update the last fall_detection() time
+  }
+  
+  // Check if it's time to run mesh.update()
+  if (millis() - lastMeshUpdateTime >= 1000) {
+    mesh.update();
+    digitalWrite(LED, !onFlag);
+    lastMeshUpdateTime = millis(); // Update the last mesh.update() time
+  }
+
+  // delay(1000); //Add time delay to avoid program jam
 }
 
-void receivedCallback(uint32_t from, String &msg) {
+
+void receivedCallback(uint32_t from, String& msg) {
   StaticJsonDocument<200> jsonDocument;
   DeserializationError error = deserializeJson(jsonDocument, msg);
   if (error) {
@@ -157,9 +207,7 @@ void receivedCallback(uint32_t from, String &msg) {
     Serial.println(error.c_str());
     return;
   }
-
-  uint32_t priority = jsonDocument["priority"].as<uint32_t>();
-
+  // uint32_t priority = jsonDocument["priority"].as<uint32_t>();
   SimpleList<String>::iterator it = messageList.begin();
   while (it != messageList.end()) {
     StaticJsonDocument<200> existingMsg;
@@ -169,28 +217,12 @@ void receivedCallback(uint32_t from, String &msg) {
       Serial.println(existingError.c_str());
       continue;  // Skip this message
     }
-
-      // existingMsg["id"] = mesh.getNodeId();
-      // String modifiedMsg;
-      // serializeJson(existingMsg, modifiedMsg);
-      // mesh.sendBroadcast(modifiedMsg);
-      // Serial.printf("Sending modified message: %s\n", modifiedMsg.c_str());
-    uint32_t existingPriority = existingMsg["priority"].as<uint32_t>();
-    if (priority < existingPriority) {
-      break;  // Found the position to insert the message
-    }
-
-    existingMsg["id"] = mesh.getNodeId();
-    String modifiedMsg;
-    serializeJson(existingMsg, modifiedMsg);
-    mesh.sendBroadcast(modifiedMsg);
-    Serial.printf("Sending modified message: %s\n", modifiedMsg.c_str());
-
+    // uint32_t existingPriority = existingMsg["priority"].as<uint32_t>();
+    // if (priority < existingPriority) {
+    //   break;  // Found the position to insert the message
+    // }
     ++it;
   }
-
-  receiveMessage.insert(it, msg);
-
   messageList.insert(it, msg);
 }
 
@@ -230,33 +262,56 @@ void sendMessage() {
   StaticJsonDocument<200> jsonDocument;
   String jsonString;
   JsonObject message = jsonDocument.createNestedObject("message");
-  message["fall_detection"] = messageString;
 
-  jsonDocument["id"] = mesh.getNodeId();
-  jsonDocument["priority"] = randomizePriority();
+  if(exist_msg != ""){
+    // message["fall_detection"] = fall_msg;
+    message["human_existent"] = exist_msg;
+    jsonDocument["id"] = mesh.getNodeId();
 
-  // Convert the JSON document to a string
-  serializeJson(jsonDocument, jsonString);
+    // Convert the JSON document to a string
+    serializeJson(jsonDocument, jsonString);
 
-  Serial.printf("Root Node Id: %d\n", rootNodeID);
-  // Send the JSON string
-  mesh.sendSingle(rootNodeID, jsonString);
+    // Send the JSON string
+    mesh.sendSingle(rootNodeID, jsonString);
 
-  // Print the message being sent
-  Serial.printf("Sending message: %s\n", jsonString.c_str());
+    // Print the message being sent
+    Serial.printf("Sending message: %s\n", jsonString.c_str());
+  }
+
+  if (calc_delay) {
+    SimpleList<uint32_t>::iterator node = nodes.begin();
+    while (node != nodes.end()) {
+      mesh.startDelayMeas(*node);
+      node++;
+    }
+    calc_delay = false;
+  }
   
-
   // Set the interval for sending messages
   taskSendMessage.setInterval(TASK_SECOND);  // send every 1 second
 }
 
-StaticJsonDocument<200> doc;
+void findRootNode(JsonObject node) {
+  // Check if 'root' is true
+  if (node["root"] == true) {
+    // Get the 'nodeId' and set it to the global variable 'rootNodeID'
+    rootNodeID = node["nodeId"];
+    Serial.printf("Root node ID: %u\n", rootNodeID);
+    return;
+  }
+
+  // If 'root' is not true, check the sub-nodes
+  JsonArray subs = node["subs"];
+  for (JsonObject sub : subs) {
+    findRootNode(sub);
+  }
+}
+
 void newConnectionCallback(uint32_t nodeId) {
   // Reset blink task
   onFlag = false;
   blinkNoNodes.setIterations((mesh.getNodeList().size() + 1) * 2);
   blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD * 1000)) / 1000);
-
   Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
   Serial.printf("--> startHere: New Connection, %s\n", mesh.subConnectionJson(true).c_str());
 
@@ -266,17 +321,8 @@ void newConnectionCallback(uint32_t nodeId) {
     Serial.println("Failed to parse JSON");
     return;
   }
-  
-  JsonArray subs = doc["subs"];
-  for (JsonObject sub : subs) {
-    // Check if 'root' is true
-    if (sub["root"] == true) {
-      // Get the 'nodeId' and set it to the global variable 'rootNodeID'
-      rootNodeID = sub["nodeId"];
-      Serial.printf("Root node ID: %u\n", rootNodeID);
-      break;
-    }
-  }
+
+  findRootNode(doc.as<JsonObject>());
 }
 
 void changedConnectionCallback() {
@@ -285,9 +331,7 @@ void changedConnectionCallback() {
   onFlag = false;
   blinkNoNodes.setIterations((mesh.getNodeList().size() + 1) * 2);
   blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD * 1000)) / 1000);
-
   nodes = mesh.getNodeList();
-
   Serial.printf("Num nodes: %d\n", nodes.size());
   Serial.printf("Connection list:");
 
