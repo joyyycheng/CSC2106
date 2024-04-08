@@ -208,8 +208,22 @@ void sendMessage() {
 }
 
 
-uint32_t rootNodeID;
-StaticJsonDocument<200> doc;
+void findRootNode(JsonObject node) {
+  // Check if 'root' is true
+  if (node["root"] == true) {
+    // Get the 'nodeId' and set it to the global variable 'rootNodeID'
+    rootNodeID = node["nodeId"];
+    Serial.printf("Root node ID: %u\n", rootNodeID);
+    return;
+  }
+
+  // If 'root' is not true, check the sub-nodes
+  JsonArray subs = node["subs"];
+  for (JsonObject sub : subs) {
+    findRootNode(sub);
+  }
+}
+
 void newConnectionCallback(uint32_t nodeId) {
   // Reset blink task
   onFlag = false;
@@ -224,17 +238,8 @@ void newConnectionCallback(uint32_t nodeId) {
     Serial.println("Failed to parse JSON");
     return;
   }
-  
-  JsonArray subs = doc["subs"];
-  for (JsonObject sub : subs) {
-    // Check if 'root' is true
-    if (sub["root"] == true) {
-      // Get the 'nodeId' and set it to the global variable 'rootNodeID'
-      rootNodeID = sub["nodeId"];
-      Serial.printf("Root node ID: %u\n", rootNodeID);
-      break;
-    }
-  }
+
+  findRootNode(doc.as<JsonObject>());
 }
 
 void changedConnectionCallback() {

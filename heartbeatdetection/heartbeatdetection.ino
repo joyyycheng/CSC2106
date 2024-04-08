@@ -41,6 +41,9 @@ SimpleList<uint32_t> nodes;
 SimpleList<String> messageList;
 SimpleList<String> receiveMessage;
 
+uint32_t rootNodeID;
+StaticJsonDocument<200> doc;
+
 String heartRateString = "";
 
 void sendMessage() ; // Prototype
@@ -66,7 +69,7 @@ void setup() {
   while (!Serial);
   Serial.println("123Ready");
 
-  mesh.setDebugMsgTypes(ERROR | DEBUG);  // set before init() so that you can see error messages
+  mesh.setDebugMsgTypes(ERROR | DEBUG | CONNECTION);  // set before init() so that you can see error messages
 
   mesh.init(MESH_SSID, MESH_PASSWORD, &userScheduler, MESH_PORT);
 
@@ -137,11 +140,11 @@ void loop()
         Serial.print(", point 5 : ");
         Serial.println(radar.heart_point_5);
         Serial.println("----------------------------");
-        heartRateString = "[HEARTRATEEAVE] The heart rate waveform(Sine wave) -- point 1: " + radar.heart_point_1
-        + ", point 2 : " + radar.heart_point_2
-        + ", point 3 : " + radar.heart_point_3
-        + ", point 4 : " + radar.heart_point_4
-        + ", point 5 : " + radar.heart_point_5;
+        heartRateString = "[HEARTRATEEAVE] The heart rate waveform(Sine wave) -- point 1: " + String(radar.heart_point_1, DEC)
+        + ", point 2 : " + String(radar.heart_point_2, DEC)
+        + ", point 3 : " + String(radar.heart_point_3, DEC)
+        + ", point 4 : " + String(radar.heart_point_4, DEC)
+        + ", point 5 : " + String(radar.heart_point_5, DEC);
         break;
       case BREATHNOR:
         Serial.println("Sensor detects current breath rate is normal.");
@@ -181,20 +184,17 @@ void loop()
         Serial.print(", point 5 : ");
         Serial.println(radar.breath_point_5);
         Serial.println("----------------------------");
-        heartRateString = "[BREATHWAVE] The breath rate waveform(Sine wave) -- point 1: " + radar.heart_point_1
-        + ", point 2 : " + radar.heart_point_2
-        + ", point 3 : " + radar.heart_point_3
-        + ", point 4 : " + radar.heart_point_4
-        + ", point 5 : " + radar.heart_point_5;
+        heartRateString = "[BREATHWAVE] The breath rate waveform(Sine wave) -- point 1: " + String(radar.heart_point_1, DEC)
+        + ", point 2 : " + String(radar.heart_point_2, DEC)
+        + ", point 3 : " + String(radar.heart_point_3, DEC)
+        + ", point 4 : " + String(radar.heart_point_4, DEC)
+        + ", point 5 : " + String(radar.heart_point_5, DEC);
         break;
     }
   }
   delay(200); //Add time delay to avoid program jam                
 }
 
-int randomizePriority() {
-  return random(1, 4);
-}
 
 void receivedCallback(uint32_t from, String & msg) {
   StaticJsonDocument<200> jsonDocument;
@@ -204,8 +204,6 @@ void receivedCallback(uint32_t from, String & msg) {
       Serial.println(error.c_str());
       return;
   }
-  
-  uint32_t priority = jsonDocument["priority"].as<uint32_t>();
 
   SimpleList<String>::iterator it = messageList.begin();
   while (it != messageList.end()) {
@@ -216,17 +214,6 @@ void receivedCallback(uint32_t from, String & msg) {
           Serial.println(existingError.c_str());
           continue; // Skip this message
       }
-      
-      uint32_t existingPriority = existingMsg["priority"].as<uint32_t>();
-      if (priority < existingPriority) {
-          break; // Found the position to insert the message
-      }
-
-      existingMsg["id"] = mesh.getNodeId();
-      String modifiedMsg;
-      serializeJson(existingMsg, modifiedMsg);
-      mesh.sendBroadcast(modifiedMsg);
-      Serial.printf("Sending modified message: %s\n", modifiedMsg.c_str());
 
       ++it;
   }
@@ -238,15 +225,15 @@ void receivedCallback(uint32_t from, String & msg) {
 
 void printMessages() {
   Serial.println("Messages received in the last 2 seconds:");
-  for (const auto &msg : messageList) {
+  for (const auto& msg : messageList) {
     StaticJsonDocument<200> jsonDocument;
     DeserializationError error = deserializeJson(jsonDocument, msg);
     if (error) {
-        Serial.print("Parsing failed: ");
-        Serial.println(error.c_str());
-        continue;
+      Serial.print("Parsing failed: ");
+      Serial.println(error.c_str());
+      continue;
     }
-    
+
     uint32_t id = jsonDocument["id"];
     JsonObject message = jsonDocument["message"];
 
@@ -254,17 +241,18 @@ void printMessages() {
     Serial.printf("Received message from node %u: ", id);
     for (JsonPair property : message) {
       Serial.printf("%s = %s, ", property.key().c_str(), property.value().as<String>().c_str());
+
     }
     Serial.println();
 
-    uint32_t priority = jsonDocument["priority"];
+    // uint32_t priority = jsonDocument["priority"];
 
     // Format and print the message
     // Serial.printf("Received message from node %u: heart rate = %f, SpO2 = %f, priority = %u\n", id, heartRate, spO2, priority);
   }
   // Clear the message list after printing
   messageList.clear();
-  taskReceivedMessage.setInterval(TASK_SECOND * 2); // send every 1 second
+  taskReceivedMessage.setInterval(TASK_SECOND * 2);  // send every 1 second
 }
 
 void sendMessage() {
@@ -275,12 +263,11 @@ void sendMessage() {
   message["heartratedetection"] = heartRateString;
 
   jsonDocument["id"] = mesh.getNodeId();
-  jsonDocument["priority"] = randomizePriority();
   // Convert the JSON document to a string
   serializeJson(jsonDocument, jsonString);
 
   // Send the JSON string
-  mesh.sendBroadcast(jsonString);
+  mesh.sendSingle(rootNodeID, jsonString);
 
   // Print the message being sent
   Serial.printf("Sending message: %s\n", jsonString.c_str());
@@ -291,14 +278,38 @@ void sendMessage() {
 
 
 
+void findRootNode(JsonObject node) {
+  // Check if 'root' is true
+  if (node["root"] == true) {
+    // Get the 'nodeId' and set it to the global variable 'rootNodeID'
+    rootNodeID = node["nodeId"];
+    Serial.printf("Root node ID: %u\n", rootNodeID);
+    return;
+  }
+
+  // If 'root' is not true, check the sub-nodes
+  JsonArray subs = node["subs"];
+  for (JsonObject sub : subs) {
+    findRootNode(sub);
+  }
+}
+
 void newConnectionCallback(uint32_t nodeId) {
   // Reset blink task
   onFlag = false;
   blinkNoNodes.setIterations((mesh.getNodeList().size() + 1) * 2);
-  blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD*1000))/1000);
- 
+  blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD * 1000)) / 1000);
   Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
   Serial.printf("--> startHere: New Connection, %s\n", mesh.subConnectionJson(true).c_str());
+
+  doc.clear();
+  DeserializationError error = deserializeJson(doc, mesh.subConnectionJson(true).c_str());
+  if (error) {
+    Serial.println("Failed to parse JSON");
+    return;
+  }
+
+  findRootNode(doc.as<JsonObject>());
 }
 
 void changedConnectionCallback() {

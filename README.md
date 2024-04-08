@@ -4,7 +4,8 @@
 This project aims to develop an assisted home automation system specifically designed for the elderly. The system will provide various features to enhance the comfort, safety, and convenience of elderly individuals living independently at home.
 
 ## Features
-
+Notifications Alert based on the sensors
+Able to integrate multiple sensors for the system(Presence, Heart Rate, Temperature)
 
 ## Installation
 There are a few devices to be set up, please navigate to the respective header for your device
